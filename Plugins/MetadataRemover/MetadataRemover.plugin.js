@@ -60,19 +60,19 @@ module.exports = class MetadataRemover {
         container.style.cssText = "color: var(--text-normal); padding: 10px;";
 
         const cfg = this.settings.current;
-        const toggles = [
+        const items = [
             { key: "stripMetadata", label: "Remove metadata from files (EXIF, ID3, etc)" },
             { key: "randomizeFileName", label: "Randomize file names" }
         ];
 
-        toggles.forEach(item => {
+        items.forEach(item => {
             const row = document.createElement("label");
             row.style.cssText = "display: flex; align-items: center; margin: 10px 0; cursor: pointer;";
 
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.checked = cfg[item.key];
-            checkbox.style.cssText = "margin-right: 10px; cursor: pointer;";
+            checkbox.style.cssText = "margin-right: 10px; cursor: pointer; width: 18px; height: 18px;";
 
             checkbox.addEventListener("change", () => {
                 cfg[item.key] = checkbox.checked;
