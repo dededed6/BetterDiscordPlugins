@@ -49,7 +49,7 @@ module.exports = class BlockTrack {
             { key: "readReceipts", label: "Block Read Receipts" },
             { key: "activity", label: "Block Activity Status" },
             { key: "process", label: "Block Game Library & RPC" },
-            { key: "beacon", label: "Block Beacon API (Page Unload)" }
+            { key: "beacon", label: "Block Beacon API" }
         ];
 
         items.forEach(item => {

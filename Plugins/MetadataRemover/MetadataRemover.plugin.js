@@ -1,8 +1,8 @@
 /**
  * @name MetadataRemover
  * @author dededed6
- * @version 1.0.0
- * @description Remove metadata from files (images, audio, documents)
+ * @version 1.1.0
+ * @description Remove metadata from files and pasted images
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/Plugins/MetadataRemover/MetadataRemover.plugin.js
  */
@@ -23,34 +23,37 @@ module.exports = class MetadataRemover {
 
     async handleFileUpload(_, args) {
         const cfg = this.settings.current;
-        if (!cfg.stripMetadata && !cfg.randomizeFileName) return;
-
         const attachments = args[2]?.attachmentsToUpload;
         if (!attachments?.length) return;
 
         for (let i = 0; i < attachments.length; i++) {
-            let file = attachments[i];
+            const attachment = attachments[i];
 
-            if (cfg.stripMetadata) {
-                file = await MetadataStripper.strip(file);
+            // 원본 파일명 저장
+            const originalFilename = attachment.filename || attachment.name || '';
+            const originalExt = originalFilename.substring(originalFilename.lastIndexOf('.') + 1) || '';
+
+            // 메타데이터 제거
+            if (attachment.file) {
+                attachment.file = await MetadataStripper.strip(attachment.file);
             }
 
+            // 이름 난독화 - filename 직접 수정
             if (cfg.randomizeFileName) {
-                const ext = file.name.substring(file.name.lastIndexOf('.') + 1) || '';
-                const newName = this.generateRandomName(ext);
-                const buffer = await file.arrayBuffer();
-                file = new File([buffer], newName, { type: file.type });
+                const randomName = this.generateRandomName(originalExt);
+                attachment.filename = randomName;
             }
-
-            attachments[i] = file;
         }
     }
 
     generateRandomName(ext) {
         const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const now = Date.now();
+        let seed = now;
         let name = '';
         for (let i = 0; i < 10; i++) {
-            name += chars.charAt(Math.floor(Math.random() * chars.length));
+            seed = (seed * 9301 + 49297) % 233280;
+            name += chars.charAt((seed / 233280) * chars.length | 0);
         }
         return ext ? `${name}.${ext}` : name;
     }
@@ -61,7 +64,6 @@ module.exports = class MetadataRemover {
 
         const cfg = this.settings.current;
         const items = [
-            { key: "stripMetadata", label: "Remove metadata from files (EXIF, ID3, etc)" },
             { key: "randomizeFileName", label: "Randomize file names" }
         ];
 
@@ -84,6 +86,11 @@ module.exports = class MetadataRemover {
             container.appendChild(row);
         });
 
+        const info = document.createElement("div");
+        info.style.cssText = "color: var(--text-muted); font-size: 12px; margin-top: 15px;";
+        info.textContent = "✓ Metadata removal is always enabled";
+        container.appendChild(info);
+
         return container;
     }
 };
@@ -93,7 +100,6 @@ class SettingsManager {
     constructor(name) {
         this.name = name;
         this.defaultSettings = {
-            stripMetadata: true,
             randomizeFileName: false
         };
         this.current = Object.assign(structuredClone(this.defaultSettings), BdApi.Data.load(name, "settings") || {});
@@ -115,10 +121,12 @@ class MetadataStripper {
         'pdf': 'stripPdfMetadata',
         'mp3': 'stripMp3Metadata',
         'flac': 'stripFlacMetadata',
-        'aac': 'stripAacMetadata'
+        'aac': 'stripAacMetadata',
+        'mov': 'stripMovMetadata', 'mp4': 'stripMovMetadata'
     };
 
     static async strip(file) {
+        if (!file || !file.name) return file;
         const ext = file.name.substring(file.name.lastIndexOf('.') + 1).toLowerCase();
         const handler = this.HANDLERS[ext];
         return handler ? await this[handler](file) : file;
@@ -354,5 +362,121 @@ class MetadataStripper {
         const strippedBuffer = buffer.slice(offset);
         const blob = new Blob([strippedBuffer], { type: file.type });
         return new File([blob], file.name, { type: file.type });
+    }
+
+    static async stripMovMetadata(file) {
+        const buffer = await file.arrayBuffer();
+        const view = new DataView(buffer);
+        const uint8view = new Uint8Array(buffer);
+        const atoms = [];
+        let offset = 0;
+
+        while (offset < buffer.byteLength) {
+            if (offset + 8 > buffer.byteLength) break;
+            const size = view.getUint32(offset, false);
+            if (size < 8) break;
+
+            const type = String.fromCharCode(
+                uint8view[offset + 4],
+                uint8view[offset + 5],
+                uint8view[offset + 6],
+                uint8view[offset + 7]
+            );
+
+            const atomEnd = offset + size;
+            const metadataAtoms = ['udta', 'meta', 'ilst', 'free'];
+
+            if (!metadataAtoms.includes(type)) {
+                if (type === 'moov') {
+                    atoms.push(this.stripMovAtom(buffer, offset, size));
+                } else {
+                    atoms.push(uint8view.slice(offset, atomEnd));
+                }
+            }
+
+            offset = atomEnd;
+        }
+
+        if (atoms.length === 0) return file;
+        const strippedBuffer = new Blob(atoms, { type: file.type });
+        const mimeType = file.type || 'video/quicktime';
+        return new File([strippedBuffer], file.name, { type: mimeType });
+    }
+
+    static stripMovAtom(buffer, offset, size) {
+        const view = new DataView(buffer);
+        const uint8view = new Uint8Array(buffer);
+        const atoms = [];
+        let atomOffset = offset + 8;
+
+        atoms.push(uint8view.slice(offset, offset + 8));
+
+        while (atomOffset < offset + size) {
+            if (atomOffset + 8 > offset + size) break;
+            const atomSize = view.getUint32(atomOffset, false);
+            if (atomSize < 8) break;
+
+            const atomType = String.fromCharCode(
+                uint8view[atomOffset + 4],
+                uint8view[atomOffset + 5],
+                uint8view[atomOffset + 6],
+                uint8view[atomOffset + 7]
+            );
+
+            const metadataAtoms = ['udta', 'meta', 'ilst'];
+            if (!metadataAtoms.includes(atomType)) {
+                // 타임스탬프가 있는 원자들 (mvhd, tkhd, mdhd, elst 등)
+                if (['mvhd', 'tkhd', 'mdhd', 'elst', 'gmhd'].includes(atomType)) {
+                    const atomData = new Uint8Array(buffer, atomOffset, atomSize);
+                    const atomCopy = new Uint8Array(atomSize);
+                    atomCopy.set(atomData);
+                    const dv = new DataView(atomCopy.buffer, atomCopy.byteOffset);
+
+                    // version 확인 (offset 8)
+                    const version = atomCopy[8];
+
+                    if (version === 0) {
+                        // version 0: 32-bit 타임스탬프 (offset 12-19)
+                        if (atomSize >= 20) {
+                            dv.setUint32(12, 0, false);  // creation time
+                            dv.setUint32(16, 0, false);  // modification time
+                        }
+                    } else if (version === 1) {
+                        // version 1: 64-bit 타임스탬프 (offset 12-27)
+                        if (atomSize >= 28) {
+                            dv.setUint32(12, 0, false);  // creation time (high 32)
+                            dv.setUint32(16, 0, false);  // creation time (low 32)
+                            dv.setUint32(20, 0, false);  // modification time (high 32)
+                            dv.setUint32(24, 0, false);  // modification time (low 32)
+                        }
+                    }
+
+                    atoms.push(atomCopy);
+                }
+                // 컨테이너 원자 (trak, mdia, minf, stbl 등) - 재귀 처리
+                else if (['trak', 'mdia', 'minf', 'stbl', 'edts'].includes(atomType)) {
+                    atoms.push(this.stripMovAtom(buffer, atomOffset, atomSize));
+                }
+                // 나머지 원자
+                else {
+                    atoms.push(uint8view.slice(atomOffset, atomOffset + atomSize));
+                }
+            }
+
+            atomOffset += atomSize;
+        }
+
+        const result = new Uint8Array(atoms.reduce((a, b) => a + b.length, 0));
+        let pos = 0;
+        for (const chunk of atoms) {
+            result.set(chunk, pos);
+            pos += chunk.length;
+        }
+
+        const newSize = result.length;
+        const sizeView = new DataView(result.buffer);
+        sizeView.setUint32(0, newSize, false);
+
+        return result;
     }
 }
