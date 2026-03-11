@@ -10,7 +10,7 @@ Block Discord tracking and analytics events, including science events, Sentry er
 ### [CleanUrls](Plugins/CleanUrls/README.md)
 Remove tracking parameters from URLs using ClearURLs rules.
 
-### [MetadataRemover](Plugins/MetadataRemover/README.md)
+### [RemoveMetadata](Plugins/RemoveMetadata/README.md)
 Remove metadata from files and pasted images before uploading to Discord. Supports 20+ formats including FLAC, WebM, and PDF. Optional file name randomization.
 
 ## License

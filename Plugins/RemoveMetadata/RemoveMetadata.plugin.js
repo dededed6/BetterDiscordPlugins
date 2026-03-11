@@ -1,13 +1,13 @@
 /**
- * @name MetadataRemover
+ * @name RemoveMetadata
  * @author dededed6
  * @version 1.3.0
  * @description Remove personal metadata from files
  * @website https://github.com/dededed6/BetterDiscordPlugins
- * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/Plugins/MetadataRemover/MetadataRemover.plugin.js
+ * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/Plugins/RemoveMetadata/RemoveMetadata.plugin.js
  */
 
-module.exports = class MetadataRemover {
+module.exports = class RemoveMetadata {
     constructor(meta) {
         this.meta = meta;
         this.settings = new SettingsManager(meta.name);
@@ -18,25 +18,17 @@ module.exports = class MetadataRemover {
         const addFileModule = BdApi.Webpack.getByKeys("addFile");
         if (addFileModule?.addFiles) {
             BdApi.Patcher.before(this.meta.name, addFileModule, "addFiles", async (thisArg, args) => {
-                console.log("[MetadataRemover] addFiles called");
                 await this.processAddFiles(args);
             });
-            console.log("[MetadataRemover] Patched addFiles successfully");
-        } else {
-            console.error("[MetadataRemover] Failed to find addFiles function");
         }
-
+        
         // _sendMessage 패치 (파일 이름 랜덤화)
         const sendMsgModule = BdApi.Webpack.getByKeys("_sendMessage");
         if (sendMsgModule) {
             BdApi.Patcher.before(this.meta.name, sendMsgModule, "_sendMessage", (thisArg, args) => {
-                console.log("[MetadataRemover] _sendMessage called");
                 this.randomizeFileNames.call(this, thisArg, args);
             });
-            console.log("[MetadataRemover] Patched _sendMessage successfully");
         }
-
-        console.log("[MetadataRemover] Plugin started successfully");
     }
 
     stop() {
@@ -50,8 +42,6 @@ module.exports = class MetadataRemover {
         if (!files || !Array.isArray(files)) {
             return;
         }
-
-        console.log(`[MetadataRemover] Removing metadata from ${files.length} files`);
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -75,7 +65,6 @@ module.exports = class MetadataRemover {
                 } else {
                     files[i] = strippedFile;
                 }
-                console.log(`[MetadataRemover] Removed metadata from: ${strippedFile.name}`);
             }
         }
     }
@@ -93,7 +82,6 @@ module.exports = class MetadataRemover {
             const originalExt = originalFilename.substring(originalFilename.lastIndexOf('.') + 1) || '';
             const randomName = this.generateRandomName(originalExt);
             attachment.filename = randomName;
-            console.log(`[MetadataRemover] Randomized filename: ${randomName}`);
         }
     }
 
@@ -107,29 +95,11 @@ module.exports = class MetadataRemover {
             const attachment = attachments[i];
             const fileToProcess = attachment.item?.file;
 
-            console.log(`[MetadataRemover] Processing attachment ${i}:`, {
-                attachment: attachment,
-                fileToProcess: fileToProcess,
-                fileType: typeof fileToProcess,
-                fileName: fileToProcess?.name,
-                fileSize: fileToProcess?.size
-            });
-
             if (fileToProcess && typeof fileToProcess.arrayBuffer === 'function') {
                 const strippedFile = await MetadataStripper.strip(fileToProcess);
 
-                console.log(`[MetadataRemover] Stripped file:`, {
-                    strippedFile: strippedFile,
-                    strippedFileName: strippedFile?.name,
-                    strippedFileSize: strippedFile?.size,
-                    isSameReference: strippedFile === fileToProcess
-                });
-
                 if (strippedFile !== fileToProcess && attachment.item?.file) {
-                    console.log(`[MetadataRemover] Before replacement - attachment.item.file:`, attachment.item.file);
                     attachment.item.file = strippedFile;
-                    console.log(`[MetadataRemover] After replacement - attachment.item.file:`, attachment.item.file);
-                    console.log(`[MetadataRemover] Is same as strippedFile?`, attachment.item.file === strippedFile);
                 }
             }
 

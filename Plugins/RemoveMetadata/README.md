@@ -1,4 +1,4 @@
-# MetadataRemover
+# RemoveMetadata
 
 Remove metadata from files and pasted images before uploading to Discord. Supports 20+ formats including FLAC, WebM, and PDF. Optional file name randomization.
 
