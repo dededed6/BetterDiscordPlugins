@@ -14,6 +14,7 @@ module.exports = class CleanUrls {
         this.rules = null;
         this.enabled = false;
         this.abortController = null;
+        this.clickListener = null;
     }
 
     async start() {
@@ -33,6 +34,10 @@ module.exports = class CleanUrls {
     stop() {
         this.abortController?.abort();
         this.enabled = false;
+        if (this.clickListener) {
+            document.removeEventListener("click", this.clickListener, true);
+            this.clickListener = null;
+        }
         BdApi.Patcher.unpatchAll(this.meta.name);
     }
 
@@ -210,7 +215,7 @@ module.exports = class CleanUrls {
 
     // 링크 클릭 시 URL 정리
     patchLinkClicks() {
-        document.addEventListener("click", (e) => {
+        this.clickListener = (e) => {
             if (!this.enabled) return;
             const link = e.target.closest("a[href]");
             if (link) {
@@ -222,7 +227,8 @@ module.exports = class CleanUrls {
                     }
                 }
             }
-        }, true);
+        };
+        document.addEventListener("click", this.clickListener, true);
     }
 };
 
