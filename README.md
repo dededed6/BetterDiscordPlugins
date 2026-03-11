@@ -11,7 +11,7 @@ Block Discord tracking and analytics events, including science events, Sentry er
 Remove tracking parameters from URLs using ClearURLs rules.
 
 ### [MetadataRemover](Plugins/MetadataRemover/README.md)
-Automatically remove metadata from files and pasted images before uploading to Discord. Supports JPEG, PNG, WebP, GIF, TIFF, MP3, FLAC, AAC, MOV, MP4, and PDF formats. Optional file name randomization.
+Remove metadata from files and pasted images before uploading to Discord. Supports 20+ formats including FLAC, WebM, and PDF. Optional file name randomization.
 
 ## License
 
