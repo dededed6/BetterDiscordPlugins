@@ -12,31 +12,33 @@ module.exports = class CleanUrls {
         this.meta = meta;
         this.settings = new SettingsManager(meta.name);
         this.rules = null;
-        this.enabled = false;
+        this.enabled = true;
         this.abortController = null;
         this.clickListener = null;
+        this.copyListener = null;
     }
 
     async start() {
         const cfg = this.settings.current;
-        if (cfg.enabled) {
-            this.abortController = new AbortController();
-            await this.loadRules();
-            if (this.rules) {
-                this.enabled = true;
-                if (cfg.cleanOutgoing) this.patchMessageSending();
-                if (cfg.cleanIncoming) this.patchIncomingMessages();
-                if (cfg.cleanLinks) this.patchLinkClicks();
-            }
+        this.abortController = new AbortController();
+        await this.loadRules();
+        if (this.rules) {
+            if (cfg.cleanOutgoing) this.patchMessageSending();
+            if (cfg.cleanIncoming) this.patchIncomingMessages();
+            if (cfg.cleanLinks) this.patchLinkClicks();
+            if (cfg.cleanCopy) this.patchCopyEvent();
         }
     }
 
     stop() {
         this.abortController?.abort();
-        this.enabled = false;
         if (this.clickListener) {
             document.removeEventListener("click", this.clickListener, true);
             this.clickListener = null;
+        }
+        if (this.copyListener) {
+            document.removeEventListener("copy", this.copyListener);
+            this.copyListener = null;
         }
         BdApi.Patcher.unpatchAll(this.meta.name);
     }
@@ -47,10 +49,10 @@ module.exports = class CleanUrls {
 
         const cfg = this.settings.current;
         const items = [
-            { key: "enabled", label: "Enable CleanURLs" },
             { key: "cleanOutgoing", label: "Clean outgoing message URLs" },
             { key: "cleanIncoming", label: "Clean incoming message URLs" },
-            { key: "cleanLinks", label: "Clean link clicks" }
+            { key: "cleanLinks", label: "Clean link clicks" },
+            { key: "cleanCopy", label: "Clean URLs when copying" }
         ];
 
         items.forEach(item => {
@@ -61,18 +63,10 @@ module.exports = class CleanUrls {
             checkbox.type = "checkbox";
             checkbox.checked = cfg[item.key];
             checkbox.style.cssText = "margin-right: 10px; cursor: pointer; width: 18px; height: 18px;";
-            checkbox.disabled = item.key !== "enabled" && !cfg.enabled;
 
             checkbox.addEventListener("change", () => {
                 cfg[item.key] = checkbox.checked;
                 this.settings.save();
-                // enabled 변경 시 다른 체크박스 활성화/비활성화
-                if (item.key === "enabled") {
-                    items.slice(1).forEach(i => {
-                        const cb = row.parentElement?.querySelector(`input[data-key="${i.key}"]`);
-                        if (cb) cb.disabled = !checkbox.checked;
-                    });
-                }
             });
 
             checkbox.setAttribute("data-key", item.key);
@@ -216,7 +210,6 @@ module.exports = class CleanUrls {
     // 링크 클릭 시 URL 정리
     patchLinkClicks() {
         this.clickListener = (e) => {
-            if (!this.enabled) return;
             const link = e.target.closest("a[href]");
             if (link) {
                 const href = link.getAttribute("href");
@@ -224,11 +217,27 @@ module.exports = class CleanUrls {
                     const cleanedUrl = this.cleanUrl(href);
                     if (cleanedUrl !== href) {
                         link.setAttribute("href", cleanedUrl);
+                        link.setAttribute("title", cleanedUrl);
                     }
                 }
             }
         };
         document.addEventListener("click", this.clickListener, true);
+    }
+
+    // 복사 시 URL 정리
+    patchCopyEvent() {
+        this.copyListener = (e) => {
+            const selection = window.getSelection().toString();
+            if (selection.match(/https?:\/\//)) {
+                const cleaned = this.cleanUrl(selection);
+                if (cleaned !== selection) {
+                    e.clipboardData.setData("text/plain", cleaned);
+                    e.preventDefault();
+                }
+            }
+        };
+        document.addEventListener("copy", this.copyListener);
     }
 };
 
@@ -237,10 +246,10 @@ class SettingsManager {
     constructor(name) {
         this.name = name;
         this.defaultSettings = {
-            enabled: true,
             cleanOutgoing: true,
             cleanIncoming: true,
-            cleanLinks: true
+            cleanLinks: true,
+            cleanCopy: true
         };
         this.current = Object.assign(structuredClone(this.defaultSettings), BdApi.Data.load(name, "settings") || {});
     }
