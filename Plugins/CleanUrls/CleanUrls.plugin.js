@@ -1,7 +1,7 @@
 /**
  * @name CleanUrls
  * @author dededed6
- * @version 1.1.0
+ * @version 1.1.1
  * @description Remove tracking parameters from URLs using ClearURLs rules
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/CleanUrls/CleanUrls.plugin.js
@@ -16,6 +16,7 @@ module.exports = class CleanUrls {
         this.abortController = null;
         this.clickListener = null;
         this.copyListener = null;
+        this.contextMenuListener = null;
     }
 
     async start() {
@@ -39,6 +40,10 @@ module.exports = class CleanUrls {
         if (this.copyListener) {
             document.removeEventListener("copy", this.copyListener);
             this.copyListener = null;
+        }
+        if (this.contextMenuListener) {
+            document.removeEventListener("contextmenu", this.contextMenuListener, true);
+            this.contextMenuListener = null;
         }
         BdApi.Patcher.unpatchAll(this.meta.name);
     }
@@ -217,12 +222,26 @@ module.exports = class CleanUrls {
                     const cleanedUrl = this.cleanUrl(href);
                     if (cleanedUrl !== href) {
                         link.setAttribute("href", cleanedUrl);
-                        link.setAttribute("title", cleanedUrl);
                     }
                 }
             }
         };
         document.addEventListener("click", this.clickListener, true);
+
+        // 우클릭 복사 시 URL 정리
+        this.contextMenuListener = (e) => {
+            const link = e.target.closest("a[href]");
+            if (link) {
+                const href = link.getAttribute("href");
+                if (href?.startsWith("http")) {
+                    const cleanedUrl = this.cleanUrl(href);
+                    if (cleanedUrl !== href) {
+                        link.setAttribute("href", cleanedUrl);
+                    }
+                }
+            }
+        };
+        document.addEventListener("contextmenu", this.contextMenuListener, true);
     }
 
     // 복사 시 URL 정리
