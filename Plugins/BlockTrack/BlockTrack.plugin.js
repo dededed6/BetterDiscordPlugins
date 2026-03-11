@@ -1,7 +1,7 @@
 /**
  * @name BlockTrack
  * @author dededed6
- * @version 1.0.0
+ * @version 1.0.1
  * @description Block Discord tracking and analytics events
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/Plugins/BlockTrack/BlockTrack.plugin.js
@@ -40,50 +40,70 @@ module.exports = class BlockTrack {
         container.style.cssText = "color: var(--text-normal); padding: 10px;";
 
         const settings = this.settings.current;
-        const toggles = [
-            { section: "blockTracker", items: [
-                { key: "science", label: "Block Science/Analytics Events" },
-                { key: "sentry", label: "Block Sentry Error Reports" },
-                { key: "telemetry", label: "Block Telemetry (Performance)" },
-                { key: "experiments", label: "Block A/B Experiments" },
-                { key: "typing", label: "Block Typing Indicator" },
-                { key: "readReceipts", label: "Block Read Receipts" },
-                { key: "activity", label: "Block Activity Status" },
-                { key: "process", label: "Block Game Library & RPC" },
-                { key: "beacon", label: "Block Beacon API (Page Unload)" }
-            ] }
+        const items = [
+            { key: "science", label: "Block Science/Analytics Events" },
+            { key: "sentry", label: "Block Sentry Error Reports" },
+            { key: "telemetry", label: "Block Telemetry (Performance)" },
+            { key: "experiments", label: "Block A/B Experiments" },
+            { key: "typing", label: "Block Typing Indicator" },
+            { key: "readReceipts", label: "Block Read Receipts" },
+            { key: "activity", label: "Block Activity Status" },
+            { key: "process", label: "Block Game Library & RPC" },
+            { key: "beacon", label: "Block Beacon API (Page Unload)" }
         ];
 
-        toggles.forEach(section => {
-            const sectionDiv = document.createElement("div");
-            sectionDiv.style.cssText = "margin-bottom: 15px; padding: 10px; border: 1px solid var(--background-tertiary); border-radius: 4px;";
+        items.forEach(item => {
+            const row = document.createElement("label");
+            row.style.cssText = "display: flex; align-items: center; margin: 10px 0; cursor: pointer;";
 
-            const title = document.createElement("div");
-            title.style.cssText = "font-weight: 600; margin-bottom: 10px;";
-            title.textContent = "Tracker Blocking";
-            sectionDiv.appendChild(title);
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = settings.blockTracker[item.key];
+            checkbox.style.cssText = "margin-right: 10px; cursor: pointer; width: 18px; height: 18px;";
 
-            section.items.forEach(item => {
-                const row = document.createElement("label");
-                row.style.cssText = "display: flex; align-items: center; margin: 8px 0; cursor: pointer;";
-
-                const checkbox = document.createElement("input");
-                checkbox.type = "checkbox";
-                checkbox.checked = settings[section.section][item.key];
-                checkbox.style.cssText = "margin-right: 10px; cursor: pointer;";
-
-                checkbox.addEventListener("change", () => {
-                    settings[section.section][item.key] = checkbox.checked;
-                    this.settings.save();
-                });
-
-                row.appendChild(checkbox);
-                row.appendChild(document.createTextNode(item.label));
-                sectionDiv.appendChild(row);
+            checkbox.addEventListener("change", () => {
+                settings.blockTracker[item.key] = checkbox.checked;
+                this.settings.save();
             });
 
-            container.appendChild(sectionDiv);
+            row.appendChild(checkbox);
+            row.appendChild(document.createTextNode(item.label));
+            container.appendChild(row);
         });
+
+        // 재패치 간격 설정
+        const intervalDiv = document.createElement("div");
+        intervalDiv.style.cssText = "margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--background-tertiary);";
+
+        const intervalLabel = document.createElement("label");
+        intervalLabel.style.cssText = "display: block; margin-bottom: 8px; font-weight: 500;";
+        intervalLabel.textContent = "Repatch Interval (seconds)";
+        intervalDiv.appendChild(intervalLabel);
+
+        const inputContainer = document.createElement("div");
+        inputContainer.style.cssText = "display: flex; gap: 10px; align-items: center;";
+
+        const input = document.createElement("input");
+        input.type = "range";
+        input.min = "1";
+        input.max = "60";
+        input.value = Math.floor((settings.blockTracker.repatchInterval || 10000) / 1000);
+        input.style.cssText = "flex: 1; cursor: pointer;";
+
+        const valueDisplay = document.createElement("span");
+        valueDisplay.style.cssText = "min-width: 40px; text-align: right; color: var(--text-muted);";
+        valueDisplay.textContent = input.value + "s";
+
+        input.addEventListener("input", () => {
+            valueDisplay.textContent = input.value + "s";
+            settings.blockTracker.repatchInterval = parseInt(input.value) * 1000;
+            this.settings.save();
+        });
+
+        inputContainer.appendChild(input);
+        inputContainer.appendChild(valueDisplay);
+        intervalDiv.appendChild(inputContainer);
+        container.appendChild(intervalDiv);
 
         return container;
     }
@@ -220,9 +240,10 @@ module.exports = class BlockTrack {
 
         applyMonitorPatch();
 
-        // 주기적으로 재패칭 (기능이 재로드될 수 있으므로)
+        // 주기적으로 재패칭 (설정한 간격으로)
         if (!this._processMonitorInterval) {
-            this._processMonitorInterval = setInterval(applyMonitorPatch, 10000);
+            const interval = this.settings.current.blockTracker.repatchInterval || 10000;
+            this._processMonitorInterval = setInterval(applyMonitorPatch, interval);
         }
     }
 
@@ -249,7 +270,8 @@ class SettingsManager {
                 readReceipts: false,
                 activity: false,
                 process: true,
-                beacon: true
+                beacon: true,
+                repatchInterval: 10000
             }
         };
         this.current = this._merge(structuredClone(this.defaultSettings), BdApi.Data.load(name, "settings") || {});
