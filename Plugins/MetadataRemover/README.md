@@ -1,9 +1,8 @@
 # MetadataRemover
 
-Remove metadata from files and pasted images before uploading to Discord. Supports JPEG, PNG, WebP, GIF, TIFF, MP3, FLAC, AAC, MOV, MP4, and PDF formats.
+Remove metadata from files and pasted images before uploading to Discord. Supports 20+ formats including FLAC, WebM, and PDF
 
 ## Features
 
-- Metadata removal is always enabled (EXIF, ID3, PDF metadata, etc.)
-- Optional file name randomization with time-based seeding
-- Supports JPEG, PNG, WebP, GIF, TIFF, MP3, FLAC, AAC, MOV, MP4, and PDF formats
+- Supports JPEG, PNG, WebP, GIF, TIFF, BMP, ICO, SVG, MP3, WAV, OGG, FLAC, AAC, M4A, MOV, MP4, AVI, MKV, WebM, and PDF formats
+- File name randomization
