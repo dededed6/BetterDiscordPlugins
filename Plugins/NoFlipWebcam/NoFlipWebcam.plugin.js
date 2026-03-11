@@ -71,37 +71,6 @@ module.exports = class NoFlipWebcam {
                 transform: scaleX(1) !important;
             }
 
-            /* Comprehensive selector - all video tags */
-            video {
-                transform: scaleX(1) !important;
-            }
-
-            /* Inline style override for mirror effect */
-            [style*="scaleX(-1)"] {
-                transform: scaleX(1) !important;
-            }
-
-            [style*="transform: scale"] {
-                transform: scaleX(1) !important;
-            }
-
-            /* Media element containers */
-            div[class*="media"] {
-                transform: scaleX(1) !important;
-            }
-
-            div[class*="Media"] {
-                transform: scaleX(1) !important;
-            }
-
-            /* RTCVideoSource and video stream containers */
-            [class*="rtc"],
-            [class*="RTC"],
-            [class*="stream"],
-            [class*="Stream"] {
-                transform: scaleX(1) !important;
-            }
-
             /* Discord camera preview modal */
             [class*="cameraPreview"] {
                 transform: scaleX(1) !important;
