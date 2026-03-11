@@ -11,10 +11,6 @@ Block Discord tracking and analytics events.
 - Typing indicator blocking
 - Read receipts blocking
 - Activity status blocking
-- WebSocket payload filtering
-- Process monitoring blocking
-- WebRTC IP leak prevention
-
-## Installation
-
-Download the plugin and place it in your BetterDiscord plugins folder.
+- Game library and RPC monitoring blocking
+- Beacon API blocking (page unload tracking)
+- Periodic repatching (resolve dynamic loading issues)

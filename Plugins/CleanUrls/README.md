@@ -4,11 +4,7 @@ Remove tracking parameters from URLs using ClearURLs rules.
 
 ## Features
 
-- Automatic tracking parameter removal
-- Support for Google, Amazon, Facebook, and more
-- Daily rules update
-- Message and link click filtering
-
-## Installation
-
-Download the plugin and place it in your BetterDiscord plugins folder.
+- Clean outgoing message URLs before sending
+- Clean incoming message URLs in received messages
+- Clean URLs from link clicks
+- Support for Google, Amazon, Facebook, and thousands of other sites
