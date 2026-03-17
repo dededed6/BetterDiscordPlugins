@@ -4,17 +4,11 @@ A collection of privacy-focused BetterDiscord plugins.
 
 ## Plugins
 
-### [BlockTrack](Plugins/BlockTrack/README.md)
+### [BlockTrack](Plugins/BlockTrack/)
 Block Discord tracking and analytics events, including science events, Sentry error reports, telemetry, A/B experiments, typing indicators, read receipts, and activity status.
 
-### [CleanUrls](Plugins/CleanUrls/README.md)
-Remove tracking parameters from URLs using ClearURLs rules.
-
-### [NoFlipWebcam](Plugins/NoFlipWebcam/README.md)
+### [NoFlipWebcam](Plugins/NoFlipWebcam/)
 Disables the mirror effect on webcam video.
-
-### [RemoveMetadata](Plugins/RemoveMetadata/README.md)
-Remove metadata from files and pasted images before uploading to Discord. Supports 20+ formats including FLAC, WebM, and PDF. Optional file name randomization.
 
 ## License
 
