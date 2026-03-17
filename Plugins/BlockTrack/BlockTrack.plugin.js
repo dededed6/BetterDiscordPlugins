@@ -9,6 +9,66 @@
 
 const { Data, Patcher, Webpack } = BdApi;
 
+const Analytics = Webpack.getByKeys("AnalyticEventConfigs");
+const SentryModule = Webpack.getByKeys("captureException");
+const ExperimentsModule = Webpack.getByKeys("trackExposure");
+const TypingModule = Webpack.getByKeys("startTyping");
+const ReadReceiptsModule = Webpack.getByKeys("ack");
+const ActivityModule = Webpack.getByKeys("getActivities");
+const NativeModule = Webpack.getByKeys("getDiscordUtils");
+const DiscordUtils = NativeModule?.getDiscordUtils?.();
+
+const method_cfg = {
+    science: [
+        [Analytics?.default, "track"],
+        [Analytics?.default, "trackMaker"],
+        [Analytics?.default, "analyticsTrackingStoreMaker"],
+        [Analytics?.default, "getSuperProperties", () => ({})],
+        [Analytics?.default, "getSuperPropertiesBase64", () => ""],
+        [Analytics?.default, "extendSuperProperties"],
+        [Analytics?.default, "expandEventProperties"],
+        [Analytics?.default, "encodeProperties"],
+    ],
+    sentry: [
+        [SentryModule, "captureException"],
+        [SentryModule, "captureMessage"],
+        [SentryModule, "captureCrash"],
+        [SentryModule, "addBreadcrumb"],
+        [NativeModule, "submitLiveCrashReport"],
+    ],
+    experiments: [
+        [ExperimentsModule, "trackExposure"],
+    ],
+    typing: [
+        [TypingModule, "startTyping"],
+    ],
+    readReceipts: [
+        [ReadReceiptsModule, "ack"],
+    ],
+    activity: [
+        [ActivityModule, "getActivities", () => []],
+        [ActivityModule, "getPrimaryActivity", () => null],
+    ],
+    process: [
+        [NativeModule, "setObservedGamesCallback"],
+        [NativeModule, "setCandidateGamesCallback"],
+        [NativeModule, "setGameDetectionCallback"],
+        [NativeModule, "setGameDetectionErrorCallback"],
+        [NativeModule, "clearCandidateGamesCallback"],
+        [NativeModule, "appViewed"],
+        [NativeModule, "appLoaded"],
+        [NativeModule, "appFirstRenderAfterReadyPayload"],
+        [NativeModule, "ensureModule", (_, [moduleName], original) => {
+            if (moduleName?.includes("discord_rpc")) return;
+            return original(moduleName);
+        }],
+        [DiscordUtils, "setObservedGamesCallback2"],
+        [DiscordUtils, "startGameEvents"],
+        [DiscordUtils, "notifyGameLaunched"],
+        [DiscordUtils, "setObserverDebugCallback"],
+    ],
+}
+
 module.exports = class BlockTrack {
     constructor() {
         this.settings = {
@@ -20,71 +80,30 @@ module.exports = class BlockTrack {
             activity: false,
             process: true,
         };
-        this.modules = {};
+    }
+
+    patch(methods) {
+        methods.forEach(([target, methodName, returns = () => {}]) => {
+            if (!target || !target[methodName]) {
+                console.warn(`[BlockTrack] Failed to find ${methodName}`);
+                return;
+            }
+            Patcher.instead("BlockTrack", target, methodName, returns);
+        });
     }
 
     start() {
         this.settings = Data.load("BlockTrack", "settings") || this.settings;
-        this.loadModules();
-        this.applyAllPatches();
 
-        this._repatchInterval = setInterval(() => {
-            this.applyAllPatches();
-        }, 10000);
+        Object.entries(this.settings).forEach(([setting, enabled]) => {
+            if (enabled && method_cfg[setting]) {
+                this.patch(method_cfg[setting]);
+            }
+        });
     }
 
     stop() {
-        if (this._repatchInterval) {
-            clearInterval(this._repatchInterval);
-        }
         Patcher.unpatchAll("BlockTrack");
-    }
-
-    loadModules() {
-        if (this.settings.science) {
-            this.modules.analytics_track = { module: Webpack.getModule(m => m?.track), methods: { "track": () => {} } };
-            this.modules.analytics_metadata = { module: Webpack.getModule(m => m?.trackWithMetadata), methods: { "trackWithMetadata": () => {} } };
-            this.modules.metrics = { module: Webpack.getModule(m => m?.increment), methods: { "increment": () => {}, "distribution": () => {} } };
-        }
-        if (this.settings.sentry) {
-            this.modules.sentry_exception = { module: Webpack.getModule(m => m?.captureException), methods: { "captureException": () => {} } };
-            this.modules.sentry_message = { module: Webpack.getModule(m => m?.captureMessage), methods: { "captureMessage": () => {} } };
-            this.modules.discord_sentry = { module: Webpack.getModule(m => m?.DiscordSentry), methods: { "DiscordSentry": () => ({}) } };
-        }
-        if (this.settings.experiments) {
-            this.modules.experiments_exposure = { module: Webpack.getModule(m => m?.trackExposure), methods: { "trackExposure": () => {} } };
-        }
-        if (this.settings.typing) {
-            this.modules.typing = { module: Webpack.getModule(m => m?.startTyping), methods: { "startTyping": () => {} } };
-        }
-        if (this.settings.readReceipts) {
-            this.modules.readReceipts = { module: Webpack.getModule(m => m?.ack), methods: { "ack": () => {} } };
-        }
-        if (this.settings.activity) {
-            this.modules.activity_send = { module: Webpack.getModule(m => m?.sendActivityInviteUser), methods: { "sendActivityInviteUser": () => {} } };
-            this.modules.activity_status = { module: Webpack.getModule(m => m?.getActivities), methods: { "getActivities": () => [], "getPrimaryActivity": () => null } };
-        }
-        if (this.settings.process) {
-            this.modules.running_games = { module: Webpack.getModule(m => m?.getRunningGames), methods: { "getRunningGames": () => [] } };
-            this.modules.game_for_pid = { module: Webpack.getModule(m => m?.getGameForPID), methods: { "getGameForPID": () => null } };
-            this.modules.running_discord_apps = { module: Webpack.getModule(m => m?.getRunningDiscordApplicationIds), methods: { "getRunningDiscordApplicationIds": () => [] } };
-            this.modules.verified_app_ids = { module: Webpack.getModule(m => m?.getRunningVerifiedApplicationIds), methods: { "getRunningVerifiedApplicationIds": () => [] } };
-            this.modules.game_events = { module: Webpack.getModule(m => m?.startGameEvents), methods: { "startGameEvents": () => {} } };
-            this.modules.observed_games = { module: Webpack.getModule(m => m?.setObservedGamesCallback), methods: { "setObservedGamesCallback": () => {} } };
-            this.modules.candidate_games = { module: Webpack.getModule(m => m?.setCandidateGamesCallback), methods: { "setCandidateGamesCallback": () => {} } };
-        }
-    }
-
-    applyAllPatches() {
-        for (const [, config] of Object.entries(this.modules)) {
-            if (!config.module) continue;
-
-            Object.entries(config.methods).forEach(([method, returns]) => {
-                if (config.module[method]) {
-                    Patcher.instead("BlockTrack", config.module, method, returns);
-                }
-            });
-        }
     }
 
     getSettingsPanel() {
@@ -122,4 +141,4 @@ module.exports = class BlockTrack {
 
         return container;
     }
-};
+}
