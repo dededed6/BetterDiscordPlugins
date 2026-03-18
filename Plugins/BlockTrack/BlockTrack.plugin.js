@@ -1,7 +1,7 @@
 /**
  * @name BlockTrack
  * @author dededed6
- * @version 1.2.0
+ * @version 1.2.1
  * @description Block Discord tracking and analytics events
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/Plugins/BlockTrack/BlockTrack.plugin.js
@@ -41,6 +41,7 @@ module.exports = class BlockTrack {
                 [Analytics, "expandEventProperties"],
                 [Analytics, "encodeProperties"],
                 [ExperimentsModule, "trackExposure"],
+                // 나중엔 dispatch도 패치하면 좋을듯
             ],
             reports: [
                 [SentryModule, "captureException"],
@@ -56,15 +57,17 @@ module.exports = class BlockTrack {
                 [ActivityModule, "getPrimaryActivity", () => null],
             ],
             process: [
+                // 이거 3개 패치하면 게임 감지 막힘
                 [NativeModule, "setObservedGamesCallback"],
                 [NativeModule, "setCandidateGamesCallback"],
                 [NativeModule, "setGameDetectionCallback"],
+
                 [NativeModule, "setGameDetectionErrorCallback"],
                 [NativeModule, "clearCandidateGamesCallback"],
                 [NativeModule, "appViewed"],
                 [NativeModule, "appLoaded"],
                 [NativeModule, "appFirstRenderAfterReadyPayload"],
-                [NativeModule, "ensureModule", (_, [moduleName], original) => { return moduleName === "discord_rpc" ? {} : original(moduleName); }],
+                [NativeModule, "ensureModule", (_, [moduleName], original) => { return moduleName === "discord_rpc" ? {} : original.call(_, moduleName); }],
                 [DiscordUtils, "setObservedGamesCallback2"],
                 [DiscordUtils, "startGameEvents"],
                 [DiscordUtils, "notifyGameLaunched"],
@@ -78,7 +81,9 @@ module.exports = class BlockTrack {
         Object.entries(this.settings).forEach(([setting]) => {
             if (this.settings[setting]) {
                 this.patch_cfg[setting].forEach(([target, methodName, returns = ()=>{}]) => {
-                    Patcher.instead("BlockTrack", target, methodName, returns);
+                    if (target && typeof target[methodName] === "function") {
+                        Patcher.instead("BlockTrack", target, methodName, returns);
+                    }
                 });
             }
         });
@@ -116,8 +121,8 @@ module.exports = class BlockTrack {
             checkbox.style.cssText = "margin-right: 10px; cursor: pointer;";
 
             row.addEventListener("click", async (evt) => {
-                evt.preventDefault();
-                if (e.key === "process" && checkbox.checked === initial.process) {
+                evt.preventDefault(); // 일단 변경 취소
+                if (e.key === "process" && checkbox.checked === initial.process) { // 콜백은 언패치/패치해도 적용이 안되니까 무조건 재시작해야함
                     const confirmed = await new Promise(resolve => {
                         UI.showConfirmationModal("Restart Required", "Discord will restart when you close settings.", {
                             confirmText: "OK",
@@ -143,9 +148,12 @@ module.exports = class BlockTrack {
     start() {
         this.loadModules();
         this.settings = Data.load("BlockTrack", "settings") || this.settings;
-
+        this.initialProcess = this.settings.process;
         this.patch();
     }
 
-    stop() { Patcher.unpatchAll("BlockTrack"); }
+    stop() {
+        Patcher.unpatchAll("BlockTrack");
+        if (this.settings.process) location.reload();
+    }
 }
