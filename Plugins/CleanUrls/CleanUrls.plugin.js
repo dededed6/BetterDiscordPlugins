@@ -1,7 +1,7 @@
 /**
  * @name CleanURLs
  * @author dededed6
- * @version 1.4.1
+ * @version 1.4.2
  * @description Remove tracking parameters from URLs
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/CleanUrls/CleanUrls.plugin.js
@@ -17,12 +17,13 @@ module.exports = class CleanURLs {
     constructor() {
         this.compiledRules = null;
         this.messageObserver = null;
-        this.originals = [];
+        this.textOriginals = []; // 이거 안해도 다른 서버갔다오면 원래대로 복구되긴함
     }
 
     // Rules
     async updateRules() {
         try {
+            // 서버에서 수정됐을때만 규칙 새로 다운로드
             const lastModified = Data.load("CleanURLs", "localLastModified");
             const headers = lastModified ? { "If-Modified-Since": lastModified } : {};
             const response = await Net.fetch(RULES_URL, { headers });
@@ -33,7 +34,9 @@ module.exports = class CleanURLs {
                 Data.save("CleanURLs", "localLastModified", response.headers.get("last-modified"));
                 this.compiledRules = this.preprocessRules(freshRules);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("[CleanURLs] Failed to update rules:", e);
+        }
     }
 
     preprocessRules(rules) {
@@ -48,7 +51,7 @@ module.exports = class CleanURLs {
                 ? new RegExp(provider.rules.map(r => `^${r}$`).join("|"), "i")
                 : null,
             completeProvider: provider.completeProvider,
-        }));
+        })); // 정규식째로 저장할 수 있으면 좋을듯
     }
 
     // Patch Sending
@@ -63,7 +66,7 @@ module.exports = class CleanURLs {
     patchIncomingMessages() {
         document.querySelectorAll('[role="article"]').forEach(c => this.cleanMessageContent(c));
 
-        const newMessageCallback = mutations => {
+        const callback = mutations => {
             mutations
                 .flatMap(m => m.target.closest?.('[class*="scrollerContent"]') ? Array.from(m.addedNodes) : [])
                 .flatMap(n => {
@@ -71,21 +74,26 @@ module.exports = class CleanURLs {
                     return a ? [a] : [];
                 }).forEach(c => this.cleanMessageContent(c));
         };
-        this.messageObserver = new MutationObserver(newMessageCallback);
-        this.messageObserver.observe(document.body, { childList: true, subtree: true });
+
+        this.messageObserver = new MutationObserver(callback);
+        this.messageObserver.observe(document.querySelector('[class*="content_"]'), { childList: true, subtree: true });
     }
 
     cleanMessageContent(container) {
         const content = container.querySelector('[id^="message-content-"]');
         if (!content || !URL_PROTOCOL_PATTERN.test(content.textContent)) return;
 
-        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null);
+        if (this.textOriginals.length > 1000) { // 1000개까지만 보존해두기. 어차피 이 이상 저장되면 DOM에서 없어져있을듯 이미
+            this.textOriginals = this.textOriginals.filter(item => item.nodeRef.deref());
+        }
+
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null); // walker말고 본문을 직접 지정하면 더 나을듯
         let node;
         while (node = walker.nextNode()) {
             const original = node.textContent;
             const cleaned = original.replace(URL_EXTRACTION_PATTERN, url => this.cleanUrl(url));
             if (cleaned !== original) {
-                this.originals.push({ node, original });
+                this.textOriginals.push({ nodeRef: new WeakRef(node), original });
                 node.textContent = cleaned;
             }
         }
@@ -95,8 +103,8 @@ module.exports = class CleanURLs {
             if (URL_PROTOCOL_PATTERN.test(href)) {
                 const cleaned = this.cleanUrl(href);
                 if (cleaned !== href) {
-                    this.originals.push({ node: link, attr: "href", original: href });
-                    link.setAttribute("href", cleaned);
+                    link.dataset.cleanUrlOriginalHref = href;
+                    link.setAttribute("href", cleaned); // 이렇게해도 임베드까지 클린 가능
                 }
             }
         }
@@ -114,11 +122,13 @@ module.exports = class CleanURLs {
             if (combinedRawRegex) cleanedUrl = cleanedUrl.replace(combinedRawRegex, "");
 
             if (combinedRulesRegex) {
-                const url = new URL(cleanedUrl);
-                for (const key of [...url.searchParams.keys()]) {
-                    if (combinedRulesRegex.test(key)) url.searchParams.delete(key);
-                }
-                cleanedUrl = url.toString();
+                try {
+                    const url = new URL(cleanedUrl);
+                    for (const key of [...url.searchParams.keys()]) {
+                        if (combinedRulesRegex.test(key)) url.searchParams.delete(key);
+                    }
+                    cleanedUrl = url.toString();
+                } catch (e) { }
             }
         }
 
@@ -141,11 +151,16 @@ module.exports = class CleanURLs {
             this.messageObserver = null;
         }
 
-        for (const { node, attr, original } of this.originals) {
-            if (attr) node.setAttribute(attr, original);
-            else node.textContent = original;
+        for (const { nodeRef, original } of this.textOriginals) {
+            const node = nodeRef.deref();
+            if (node) node.textContent = original;
         }
-        this.originals = [];
+        this.textOriginals = [];
+
+        for (const link of document.querySelectorAll("a[data-clean-url-original-href]")) {
+            link.setAttribute("href", link.dataset.cleanUrlOriginalHref);
+            delete link.dataset.cleanUrlOriginalHref;
+        }
     }
 
 };
