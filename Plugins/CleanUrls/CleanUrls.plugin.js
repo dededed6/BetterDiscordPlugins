@@ -1,334 +1,151 @@
 /**
- * @name CleanUrls
+ * @name CleanURLs
  * @author dededed6
- * @version 1.2.0
- * @description Remove tracking parameters from URLs using ClearURLs rules
+ * @version 1.4.1
+ * @description Remove tracking parameters from URLs
  * @website https://github.com/dededed6/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed6/BetterDiscordPlugins/master/CleanUrls/CleanUrls.plugin.js
  */
 
-module.exports = class CleanUrls {
-    constructor(meta) {
-        this.meta = meta;
-        this.settings = new SettingsManager(meta.name);
-        this.rules = null;
-        this.enabled = true;
-        this.abortController = null;
-        this.clickListener = null;
-        this.copyListener = null;
-        this.contextMenuListener = null;
+const { Data, Patcher, Webpack, Net } = BdApi;
+
+const URL_PROTOCOL_PATTERN = /https?:\/\//;
+const URL_EXTRACTION_PATTERN = /https?:\/\/[^\s]+/g;
+const RULES_URL = "https://rules2.clearurls.xyz/data.minify.json";
+
+module.exports = class CleanURLs {
+    constructor() {
+        this.compiledRules = null;
         this.messageObserver = null;
+        this.originals = [];
     }
 
-    async start() {
-        const cfg = this.settings.current;
-        this.abortController = new AbortController();
-        await this.loadRules();
-        if (this.rules) {
-            if (cfg.cleanOutgoing) this.patchMessageSending();
-            if (cfg.cleanIncoming) {
-                this.cleanExistingMessages();
-                this.observeNewMessages();
-                this.patchIncomingMessages();
+    // Rules
+    async updateRules() {
+        try {
+            const lastModified = Data.load("CleanURLs", "localLastModified");
+            const headers = lastModified ? { "If-Modified-Since": lastModified } : {};
+            const response = await Net.fetch(RULES_URL, { headers });
+
+            if (response.ok) {
+                const freshRules = await response.json();
+                Data.save("CleanURLs", "rules", freshRules);
+                Data.save("CleanURLs", "localLastModified", response.headers.get("last-modified"));
+                this.compiledRules = this.preprocessRules(freshRules);
             }
-            if (cfg.cleanLinks) this.patchLinkClicks();
-            if (cfg.cleanCopy) this.patchCopyEvent();
+        } catch (e) {}
+    }
+
+    preprocessRules(rules) {
+        if (!rules?.providers) return [];
+        return Object.values(rules.providers).map(provider => ({
+            urlPattern: new RegExp(provider.urlPattern, "i"),
+            exceptions: (provider.exceptions || []).map(e => new RegExp(e, "i")),
+            combinedRawRegex: provider.rawRules?.length
+                ? new RegExp(provider.rawRules.join("|"), "gi")
+                : null,
+            combinedRulesRegex: provider.rules?.length
+                ? new RegExp(provider.rules.map(r => `^${r}$`).join("|"), "i")
+                : null,
+            completeProvider: provider.completeProvider,
+        }));
+    }
+
+    // Patch Sending
+    patchMessageSending() {
+        const m = Webpack.getByKeys("sendMessage");
+        if (m) Patcher.before("CleanURLs", m, "sendMessage", (_, [, msg]) => {
+            if (msg?.content) msg.content = msg.content.replace(URL_EXTRACTION_PATTERN, url => this.cleanUrl(url));
+        });
+    }
+
+    // Patch Incoming
+    patchIncomingMessages() {
+        document.querySelectorAll('[role="article"]').forEach(c => this.cleanMessageContent(c));
+
+        const newMessageCallback = mutations => {
+            mutations
+                .flatMap(m => m.target.closest?.('[class*="scrollerContent"]') ? Array.from(m.addedNodes) : [])
+                .flatMap(n => {
+                    const a = n.nodeType === Node.ELEMENT_NODE && n.querySelector('[role="article"]');
+                    return a ? [a] : [];
+                }).forEach(c => this.cleanMessageContent(c));
+        };
+        this.messageObserver = new MutationObserver(newMessageCallback);
+        this.messageObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    cleanMessageContent(container) {
+        const content = container.querySelector('[id^="message-content-"]');
+        if (!content || !URL_PROTOCOL_PATTERN.test(content.textContent)) return;
+
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while (node = walker.nextNode()) {
+            const original = node.textContent;
+            const cleaned = original.replace(URL_EXTRACTION_PATTERN, url => this.cleanUrl(url));
+            if (cleaned !== original) {
+                this.originals.push({ node, original });
+                node.textContent = cleaned;
+            }
+        }
+
+        for (const link of content.querySelectorAll("a[href]")) {
+            const href = link.getAttribute("href");
+            if (URL_PROTOCOL_PATTERN.test(href)) {
+                const cleaned = this.cleanUrl(href);
+                if (cleaned !== href) {
+                    this.originals.push({ node: link, attr: "href", original: href });
+                    link.setAttribute("href", cleaned);
+                }
+            }
         }
     }
 
+    // Util
+    cleanUrl(urlString) {
+        if (!this.compiledRules?.length) return urlString;
+
+        let cleanedUrl = urlString;
+
+        for (const { urlPattern, exceptions, combinedRawRegex, combinedRulesRegex } of this.compiledRules) {
+            if (!urlPattern.test(urlString) || exceptions.some(r => r.test(urlString))) continue;
+
+            if (combinedRawRegex) cleanedUrl = cleanedUrl.replace(combinedRawRegex, "");
+
+            if (combinedRulesRegex) {
+                const url = new URL(cleanedUrl);
+                for (const key of [...url.searchParams.keys()]) {
+                    if (combinedRulesRegex.test(key)) url.searchParams.delete(key);
+                }
+                cleanedUrl = url.toString();
+            }
+        }
+
+        return cleanedUrl;
+    }
+
+    start() {
+        this.updateRules();
+        this.compiledRules = this.preprocessRules(Data.load("CleanURLs", "rules"));
+
+        this.patchMessageSending();
+        this.patchIncomingMessages();
+    }
+
     stop() {
-        this.abortController?.abort();
+        Patcher.unpatchAll("CleanURLs");
+        
         if (this.messageObserver) {
             this.messageObserver.disconnect();
             this.messageObserver = null;
         }
-        if (this.clickListener) {
-            document.removeEventListener("click", this.clickListener, true);
-            this.clickListener = null;
+
+        for (const { node, attr, original } of this.originals) {
+            if (attr) node.setAttribute(attr, original);
+            else node.textContent = original;
         }
-        if (this.copyListener) {
-            document.removeEventListener("copy", this.copyListener);
-            this.copyListener = null;
-        }
-        if (this.contextMenuListener) {
-            document.removeEventListener("contextmenu", this.contextMenuListener, true);
-            this.contextMenuListener = null;
-        }
-        BdApi.Patcher.unpatchAll(this.meta.name);
+        this.originals = [];
     }
 
-    getSettingsPanel() {
-        const container = document.createElement("div");
-        container.style.cssText = "color: var(--text-normal); padding: 10px;";
-
-        const cfg = this.settings.current;
-        const items = [
-            { key: "cleanOutgoing", label: "Clean outgoing message URLs" },
-            { key: "cleanIncoming", label: "Clean incoming message URLs" },
-            { key: "cleanLinks", label: "Clean link clicks" },
-            { key: "cleanCopy", label: "Clean URLs when copying" }
-        ];
-
-        items.forEach(item => {
-            const row = document.createElement("label");
-            row.style.cssText = "display: flex; align-items: center; margin: 10px 0; cursor: pointer;";
-
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.checked = cfg[item.key];
-            checkbox.style.cssText = "margin-right: 10px; cursor: pointer; width: 18px; height: 18px;";
-
-            checkbox.addEventListener("change", () => {
-                cfg[item.key] = checkbox.checked;
-                this.settings.save();
-            });
-
-            checkbox.setAttribute("data-key", item.key);
-            row.appendChild(checkbox);
-            row.appendChild(document.createTextNode(item.label));
-            container.appendChild(row);
-        });
-
-        return container;
-    }
-
-    // ClearURLs 규칙 로드
-    async loadRules() {
-        const CACHE_DURATION = 24 * 60 * 60 * 1000;
-        const cached = BdApi.Data.load(this.meta.name, "cache");
-
-        if (cached?.rules && Date.now() - cached.timestamp < CACHE_DURATION) {
-            this.rules = cached.rules;
-            this.fetchRulesInBackground();
-            return;
-        }
-
-        try {
-            const response = await fetch("https://rules2.clearurls.xyz/data.minify.json", {
-                signal: this.abortController?.signal
-            });
-            if (response.ok) {
-                this.rules = await response.json();
-                BdApi.Data.save(this.meta.name, "cache", {
-                    timestamp: Date.now(),
-                    rules: this.rules
-                });
-            }
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                if (cached?.rules) this.rules = cached.rules;
-            }
-        }
-    }
-
-    // 백그라운드에서 규칙 업데이트
-    fetchRulesInBackground() {
-        fetch("https://rules2.clearurls.xyz/data.minify.json", {
-            signal: this.abortController?.signal
-        })
-            .then(r => r.ok ? r.json() : null)
-            .then(freshRules => {
-                if (freshRules) {
-                    this.rules = freshRules;
-                    BdApi.Data.save(this.meta.name, "cache", {
-                        timestamp: Date.now(),
-                        rules: freshRules
-                    });
-                }
-            })
-            .catch(e => {
-                if (e.name !== 'AbortError') {
-                    // 백그라운드 업데이트 실패
-                }
-            });
-    }
-
-    // URL 정리
-    cleanUrl(urlString) {
-        if (!this.rules || !this.enabled) return urlString;
-
-        try {
-            let cleanedUrl = urlString;
-
-            // 1단계: 정규식으로 파라미터 제거
-            for (const provider of Object.values(this.rules.providers)) {
-                try {
-                    const pattern = new RegExp(provider.urlPattern, "i");
-                    if (!pattern.test(urlString)) continue;
-
-                    const isException = (provider.exceptions || []).some(e => new RegExp(e, "i").test(urlString));
-                    if (isException || provider.completeProvider) continue;
-
-                    for (const rule of (provider.rawRules || [])) {
-                        try {
-                            cleanedUrl = cleanedUrl.replace(new RegExp(rule, "i"), "");
-                        } catch (e) { }
-                    }
-                } catch (e) { }
-            }
-
-            // 2단계: URL 파라미터 제거
-            const url = new URL(cleanedUrl);
-
-            for (const provider of Object.values(this.rules.providers)) {
-                try {
-                    const pattern = new RegExp(provider.urlPattern, "i");
-                    if (!pattern.test(cleanedUrl)) continue;
-
-                    const isException = (provider.exceptions || []).some(e => new RegExp(e, "i").test(cleanedUrl));
-                    if (isException || provider.completeProvider) continue;
-
-                    for (const rule of (provider.rules || [])) {
-                        try {
-                            const ruleRegex = new RegExp(`^${rule}$`, "i");
-                            for (const key of [...url.searchParams.keys()]) {
-                                if (ruleRegex.test(key)) {
-                                    url.searchParams.delete(key);
-                                }
-                            }
-                        } catch (e) { }
-                    }
-                } catch (e) { }
-            }
-
-            return url.toString();
-        } catch (error) {
-            return urlString;
-        }
-    }
-
-    // 메시지 전송 시 URL 정리
-    patchMessageSending() {
-        const sendMsg = BdApi.Webpack.getByKeys("sendMessage");
-        if (sendMsg?.sendMessage) {
-            BdApi.Patcher.before(this.meta.name, sendMsg, "sendMessage", (_, [, msg]) => {
-                if (msg?.content && this.enabled) {
-                    msg.content = msg.content.replace(/https?:\/\/[^\s]+/g, url => this.cleanUrl(url));
-                }
-            });
-        }
-    }
-
-    // 새로운 메시지 감시
-    observeNewMessages() {
-        this.messageObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'childList') {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE && node.getAttribute('role') === 'article') {
-                            this.cleanMessageContent(node);
-                        } else if (node.nodeType === Node.ELEMENT_NODE) {
-                            const messages = node.querySelectorAll('[role="article"]');
-                            messages.forEach(msg => this.cleanMessageContent(msg));
-                        }
-                    });
-                }
-            });
-        });
-
-        this.messageObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    // 기존 메시지 URL 정리
-    cleanExistingMessages() {
-        let containers = document.querySelectorAll('[role="article"]');
-
-        if (containers.length === 0) {
-            containers = document.querySelectorAll('[class*="message_"]');
-        }
-
-        if (containers.length === 0) {
-            containers = document.querySelectorAll('[class*="messageContent"]');
-        }
-
-        containers.forEach(container => {
-            this.cleanMessageContent(container);
-        });
-    }
-
-    cleanMessageContent(container) {
-        const original = container.innerHTML;
-        const cleaned = original.replace(/https?:\/\/[^\s<"']+/g, url => this.cleanUrl(url));
-
-        if (original !== cleaned) {
-            container.innerHTML = cleaned;
-        }
-    }
-
-    // 받은 메시지 URL 정리
-    patchIncomingMessages() {
-        const msgModule = BdApi.Webpack.getModule(m => m?.createMessage);
-        if (msgModule?.createMessage) {
-            BdApi.Patcher.before(this.meta.name, msgModule, "createMessage", (_, [, msg]) => {
-                if (msg?.content && this.enabled) {
-                    msg.content = msg.content.replace(/https?:\/\/[^\s]+/g, url => this.cleanUrl(url));
-                }
-            });
-        }
-    }
-
-    // 링크 클릭 시 URL 정리
-    patchLinkClicks() {
-        this.clickListener = (e) => {
-            const link = e.target.closest("a[href]");
-            if (link) {
-                const href = link.getAttribute("href");
-                if (href?.startsWith("http")) {
-                    const cleanedUrl = this.cleanUrl(href);
-                    if (cleanedUrl !== href) {
-                        link.setAttribute("href", cleanedUrl);
-                    }
-                }
-            }
-        };
-        document.addEventListener("click", this.clickListener, true);
-
-        // 우클릭 복사 시 URL 정리
-        this.contextMenuListener = (e) => {
-            const link = e.target.closest("a[href]");
-            if (link) {
-                const href = link.getAttribute("href");
-                if (href?.startsWith("http")) {
-                    const cleanedUrl = this.cleanUrl(href);
-                    if (cleanedUrl !== href) {
-                        link.setAttribute("href", cleanedUrl);
-                    }
-                }
-            }
-        };
-        document.addEventListener("contextmenu", this.contextMenuListener, true);
-    }
-
-    // 복사 시 URL 정리
-    patchCopyEvent() {
-        this.copyListener = (e) => {
-            const selection = window.getSelection().toString();
-            if (selection.match(/https?:\/\//)) {
-                const cleaned = this.cleanUrl(selection);
-                if (cleaned !== selection) {
-                    e.clipboardData.setData("text/plain", cleaned);
-                    e.preventDefault();
-                }
-            }
-        };
-        document.addEventListener("copy", this.copyListener);
-    }
 };
-
-// 설정 관리
-class SettingsManager {
-    constructor(name) {
-        this.name = name;
-        this.defaultSettings = {
-            cleanOutgoing: true,
-            cleanIncoming: true,
-            cleanLinks: true,
-            cleanCopy: true
-        };
-        this.current = Object.assign(structuredClone(this.defaultSettings), BdApi.Data.load(name, "settings") || {});
-    }
-
-    save() {
-        BdApi.Data.save(this.name, "settings", this.current);
-    }
-}
