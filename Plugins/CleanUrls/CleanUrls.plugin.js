@@ -1,6 +1,6 @@
 /**
  * @name CleanURLs
- * @author dededed6
+ * @author dededed1024
  * @version 1.4.4
  * @description Remove tracking parameters from URLs
  * @website https://github.com/dededed6/BetterDiscordPlugins

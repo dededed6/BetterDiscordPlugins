@@ -1,6 +1,6 @@
 /**
  * @name NoFlipWebcam
- * @author dededed6
+ * @author dededed1024
  * @version 1.0.1
  * @description Disables the mirror effect on your webcam
  * @website https://github.com/dededed6/BetterDiscordPlugins

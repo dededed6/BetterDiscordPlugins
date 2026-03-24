@@ -1,6 +1,6 @@
 /**
  * @name RemoveMetadata
- * @author dededed6
+ * @author dededed1024
  * @version 1.3.1
  * @description Strips metadata from files and pasted images before uploading to Discord. Supports 20 formats with optional file name randomization.
  * @website https://github.com/dededed6/BetterDiscordPlugins

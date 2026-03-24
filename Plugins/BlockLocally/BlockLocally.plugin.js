@@ -1,6 +1,6 @@
 /**
  * @name BlockLocally
- * @author dededed6
+ * @author dededed1024
  * @version 1.0.0
  * @description Block users locally
  * @website https://github.com/dededed6/BetterDiscordPlugins
