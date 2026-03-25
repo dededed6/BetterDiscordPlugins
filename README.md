@@ -4,6 +4,9 @@ A collection of BetterDiscord plugins.
 
 ## Plugins
 
+### [AlwaysTrustDomains](Plugins/AlwaysTrustDomains/)
+Skip link warning dialog
+
 ### [BlockLocally](Plugins/BlockLocally/)
 Block users locally.
 
