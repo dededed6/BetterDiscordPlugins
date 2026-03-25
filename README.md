@@ -4,7 +4,7 @@ A collection of BetterDiscord plugins.
 
 ## Plugins
 
-### [AlwaysTrustDomains](Plugins/AlwaysTrustDomains/)
+### [AlwaysTrustLinks](Plugins/AlwaysTrustLinks/)
 Skip link warning dialog
 
 ### [BlockLocally](Plugins/BlockLocally/)

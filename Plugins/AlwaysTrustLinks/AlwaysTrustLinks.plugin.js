@@ -1,13 +1,13 @@
 /**
- * @name AlwaysTrustDomains
+ * @name AlwaysTrustLinks
  * @author dededed1024
  * @version 1.0.0
  * @description Skip link warning dialog
  * @website https://github.com/dededed1024/BetterDiscordPlugins
- * @source https://raw.githubusercontent.com/dededed1024/BetterDiscordPlugins/master/AlwaysTrustDomains/AlwaysTrustDomains.plugin.js
+ * @source https://raw.githubusercontent.com/dededed1024/BetterDiscordPlugins/master/AlwaysTrustLinks/AlwaysTrustLinks.plugin.js
  */
 
-module.exports = class AlwaysTrustDomains {
+module.exports = class AlwaysTrustLinks {
     
     linkClickHandler = (event) => {
         const link = event.target.closest("a[href^='http']");
