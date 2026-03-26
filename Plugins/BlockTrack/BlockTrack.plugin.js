@@ -1,7 +1,7 @@
 /**
  * @name BlockTrack
  * @author dededed1024
- * @version 1.2.1
+ * @version 1.2.2
  * @description Block Discord tracking and analytics events
  * @website https://github.com/dededed1024/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed1024/BetterDiscordPlugins/master/Plugins/BlockTrack/BlockTrack.plugin.js
@@ -35,8 +35,6 @@ module.exports = class BlockTrack {
                 [Analytics, "track"],
                 [Analytics, "trackMaker"],
                 [Analytics, "analyticsTrackingStoreMaker"],
-                [Analytics, "getSuperProperties", () => ({})],
-                [Analytics, "getSuperPropertiesBase64", () => ""],
                 [Analytics, "extendSuperProperties"],
                 [Analytics, "expandEventProperties"],
                 [Analytics, "encodeProperties"],
