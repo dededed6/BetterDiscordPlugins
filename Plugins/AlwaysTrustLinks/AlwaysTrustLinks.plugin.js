@@ -1,7 +1,7 @@
 /**
  * @name AlwaysTrustLinks
  * @author dededed1024
- * @version 1.0.0
+ * @version 1.0.1
  * @description Skip link warning dialog
  * @website https://github.com/dededed1024/BetterDiscordPlugins
  * @source https://raw.githubusercontent.com/dededed1024/BetterDiscordPlugins/master/AlwaysTrustLinks/AlwaysTrustLinks.plugin.js
