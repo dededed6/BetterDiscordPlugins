@@ -19,7 +19,7 @@ Remove tracking parameters from URLs using ClearURLs rules.
 ### [MuteServer](Plugins/MuteServer/)
 Locally hide notifications and message indicators from servers.
 
-### [NoFlipWebcam](Plugins/NoFlipWebcam/)
+### [NoMirrorWebcam](Plugins/NoFlipWebcam/)
 Disables the mirror effect on webcam video.
 
 ### [RemoveMetadata](Plugins/RemoveMetadata/)

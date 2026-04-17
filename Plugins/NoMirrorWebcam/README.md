@@ -1,4 +1,4 @@
-# NoFlipWebcam
+# NoMirrorWebcam
 
 Disables the mirror effect on webcam video.
 
